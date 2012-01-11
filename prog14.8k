@@ -1,0 +1,143 @@
+ PROGRAM 
+ REM
+ REM DESCRIPTION
+ REM 6 Headed PLATE FORMING 
+ REM 20110317 VERSION 1.0  PLS
+ REM 
+ REM This is the main control Program.
+ REM 
+ REM
+ REM ******  LOCAL PARAMETERS  ************
+ DIM SV(20) : REM floating point values 
+ DIM LV(5) 
+ REM
+ REM INITIALIZE
+ REM
+ REM
+ 
+ REM *********************User Setup State***************************
+ REM
+ _usersetup
+ REM use the hmi or command line to setup
+ REM P20 = Initial X
+ REM P21 = Initial Y
+ REM P22 = Final X
+ REM P23 = Final Y
+ REM P24 = Desired Bend in Degrees
+ REM P25 = Bend Arc Length, Bend Length
+ REM P26 = Plate Thickness
+ REM P27 = Number of Heating Heads
+ IF (BIT 138)  : REM user setup complete
+  CLR 137
+  CLR 138
+  CLR 153
+  SET 129
+  GOTO loop
+ ELSE
+  GOTO usersetup
+  ENDIF
+ REM 
+ REM *********************Main Loop**********************************
+ REM
+ _loop
+ IF (BIT 128)    : REM User Setup Active
+  SET 137
+  INH 138     : REM User Setup complete
+  CLR 137
+  CLR 128
+  SET 129
+ ELSE IF (BIT 129)   : REM Initial Forming State Active
+  CLR 138
+  SET 1032    : REM Run Prog0
+  SET 139
+  INH 140
+  CLR 139
+  CLR 129
+  SET 130
+ ELSE IF (BIT 130)   : REM Measuring State Active
+  INH 160  : REM pause bit for experiments
+  CLR 140
+  SET 1352    : REM Run Prog10
+  SET 141
+  INH 142
+  CLR 130
+  CLR 141
+  CLR 142
+  SET 131
+ ELSE IF (BIT 131)   : REM Additional Forming State Active
+  GOTO analyzescan
+ ELSE IF (BIT 144) : REM Additional Forming Complete, add scan
+  CLR 144
+  SET 154
+  SET 1352    : REM Run Prog10
+  SET 155
+  INH 156
+  CLR 154
+  SET 131
+  CLR 156  
+ ENDIF
+ GOTO loop 
+ REM
+ REM 
+ REM *********************Analyze Scan**********************************
+ REM
+ _analyzescan
+ SV1 = P24   : REM Desired Bend
+ SV2 = P94   : REM Measured BendA
+ SV3 = P99   : REM Measured BendC
+ SV4 = P29   : REM Bend Tolerance
+ REM
+ REM
+ REM **** Determine Side 1 Passes ******
+ SV5 = SV1 - SV2 : REM Desired - Measured
+ SV6 = SV5 - SV4 : REM Difference - Tolerance
+ SV7 = SV6 / P2  : REM Angle Remaining / Bend Per Pass
+ SV7 = ROUND(SV7) : REM round to whole number (passes remaining)
+ IF (SV7 > 0)
+  P27 = SV7  : REM identify passes remaining side 1 to center
+ ELSE
+  P27 = 0
+  SET 231 : REM Side A forming complete
+  CLR 134 : REM disable Station A
+  ENDIF
+ REM
+ REM **** Determine Side 2 Passes ******
+ SV8 = SV1 - SV3
+ SV9 = SV8 - SV4
+ SV10 = SV9 / P2
+ SV10 = ROUND(SV10)
+ IF (SV10 > 0)
+  P28 = SV10
+ ELSE
+  P28 = 0
+  SET 232 : REM side C Forming Complete
+  CLR 136 : REM disable Station C
+  ENDIF
+ IF ((P27 > 0) OR (P28 > 0))
+  SET 1032    : REM Run Prog0
+  SET 131   : REM additional forming
+  SET 143
+  INH 144 : REM wait for additional forming to complete
+ ELSE
+  CLR 131
+  CLR 143
+  SET 153   : REM Process Complete
+  CLR 231
+  CLR 232
+  ENDIF
+ GOTO loop
+ REM ********************************************************************
+ REM
+ REM
+ ENDP 
+ 
+
+
+
+
+
+
+
+
+
+

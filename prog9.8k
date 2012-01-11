@@ -1,0 +1,520 @@
+PROGRAM 
+ PBOOT 
+ REM PROGRAM 9 Boot and ESTOP/Error Recovery
+ REM 20110317 PLS -- Version 1.0 
+ REM *******************************************************
+ REM
+ REM 6 Headed Forming on MARGE 
+ REM
+ REM *******************************************************
+ REM
+ REM
+ REM
+ REM INITIALIZATION
+ HLIM AXIS0 3 
+ HLIM AXIS1 3 
+ HLIM AXIS2 3 
+ HLIM AXIS3 3 
+ HLIM AXIS4 3 
+ HLIM AXIS5 3
+ TLM AXIS2 (0.01,-3) 
+ DAC0 GAIN -3276.8
+ ENC0 MULT -4
+ DAC1 GAIN 3276.8 
+ ENC1 MULT 4 
+ DAC3 GAIN -3276.8
+ ENC3 MULT -4
+ DAC4 GAIN -3276.8
+ ENC4 MULT -4
+ DAC5 GAIN -3276.8
+ ENC5 MULT -4
+ DAC6 GAIN 3276.8
+ ENC6 MULT 4
+ LOCK AXIS6 AXIS0
+ REM LOCK AXIS8 AXIS2
+ ADC ON 
+ ADC0 FLT20 
+ ADC1 FLT20 
+ ADC2 FLT20 
+ ADC2 SRC P33304
+ ADC0 GAIN -11520
+ ADC1 GAIN -11844
+ ADC2 GAIN -11303
+ ADC0 OFFSET 10784
+ ADC1 OFFSET 11153
+ ADC2 OFFSET 10627
+ ADC3 GAIN 1680.5 
+ SET 11265 : REM start CANOpen
+ P33280 = 10 : REM Power Supply A,B,C Reference Voltage
+ REM P33296 = 10  : REM PowerSupply A Reference Voltage
+ REM P33328 = 10  : REM PowerSupply B Reference Voltage
+ REM P33360 = 10   : REM PowerSupply C Reference Voltage
+ IF  (P6408 > 10000) : REM check to make sure ADC is working
+  SET 133 
+  ENDIF  
+ REM
+ REM
+ REM
+ _loop
+ REM ******************** PS FAULT ******************************
+  IF (BIT221) : REM heating
+  IF  ((BIT 134) AND (NOT BIT21))  : REM PS A has faulted
+   SET 149       : REM set PS Fault Flag
+ rem ELSE IF ((BIT 135) AND (NOT BIT22)) : REM PS B has faulted
+ rem  SET 149
+ rem ELSE IF ((BIT 136) AND (NOT BIT23)) : REM PS C has faulted
+ rem  SET 149
+   ENDIF
+  IF (BIT 149)
+   SET 522   : REM Master 0 KAM
+   SET 8467  : REM Axis 0 KAMR
+   SET 8499  : REM Axis 1 KAMR
+   SET 8659  : REM Axis 6 KAMR
+   SET 8723  : REM Axis 8 KAMR
+   CLR 8467
+   CLR 8499
+   CLR 8659
+   CLR 8723
+   CLR 522
+   JOG ACC AXIS0 10 
+   JOG ACC AXIS1 10 
+   JOG ACC AXIS8 10
+   JOG DEC AXIS0 10 
+   JOG DEC AXIS1 10  
+   JOG DEC AXIS8 10
+   JOG VEL AXIS0 (P1) 
+   JOG VEL AXIS1 (P1)
+   JOG VEL AXIS8 (P1) 
+   JOG REN AXIS0 AXIS1 AXIS8
+   INH -149  : REM Wait for Heating to Resume
+   JOG ABS AXIS0 (P4) AXIS1 (P5) AXIS8 (P5)
+   INH -792   : REM wait until axis0 jog active stops
+   INH -824   : REM wait until axis1 jog active stops
+   INH -7704  : REM wait until axis8 jog active stops
+   JOG RES AXIS0 AXIS1 AXIS8
+   GOTO loop
+   ENDIF
+  ENDIF
+ REM ******************* ESTOP **********************************
+ IF (BIT5645)   : REM ESTOP occurred
+  PRINT "ESTOP"
+  SET 150    : REM ESTOP flag
+ REM ******************* HEATING ********************************
+  IF (BIT 221)  : REM Heating
+   PRINT "ESTOP Heating"
+   SET 224   : REM Shutdown Heating
+   CLR 196
+   CLR 202
+   CLR 208
+   SET 1082  : REM Pause PROG1
+   SET 1033  : REM Halt PROG0
+   SET 1097  : REM Halt PROG2
+   SET 1129  : REM Halt PROG3
+   SET 1161  : REM Halt PROG4
+   CLR 12032 : REM turn off air
+   CLR 12033
+   CLR 12040
+   P7=(P12290/P12375): P8=(P12546/P12631) : REM Get XY position
+   INH -5646   : REM wait for EStop to be pulled out
+   SET 5647   : REM clear Estop latch
+   INH -12034 : REM make sure water is off
+   INH -12035
+   INH -12042
+   DWL .5 
+   CLR 8467   : REM axis0 kamr
+   CLR 8659   : REM axis6 kamr
+   CLR 8499   : REM axis1 kamr
+   CLR 8723   : REM axis8 kamr
+   CLR 8531   : REM axis2 kamr
+   CLR 8755   : REM axis9 kamr
+   CLR 8563   : REM axis3 kamr
+   CLR 8595   : REM axis4 kamr
+   CLR 8627   : REM axis5 kamr
+   DWL .5 
+   CLR 522   : REM Master0 kam
+   CLR 554   : REM Master1 kam
+   CLR 586   : REM Master2 kam
+   CLR 618   : REM Master3 kam
+   CLR 650   : REM Master4 kam
+   DWL .5 
+   DRIVE ON AXIS0 AXIS1 AXIS2 AXIS3 AXIS4 AXIS5 AXIS6 AXIS8 AXIS9: REM turn Drives back on
+   DWL .2
+   SET 1096  : REM run PROG2
+   SET 1128  : REM run PROG3
+   SET 1160  : REM run PROG4
+   SET 1032  : REM Run Prog0
+   CLR 1082  : REM unpause PROG1
+   GOTO loop
+   ENDIF
+ REM ****************** Start AHC, Find Plate *******************
+  IF ((BIT 190) AND (NOT BIT 192)) : REM AHC has been activated, but haven't found plate
+   SET 151  : REM ESTOP occurred before finding plate
+   PRINT "ESTOP Find Plate"
+   SET 1033  : REM Halt PROG0
+   SET 1065  : REM Halt PROG1
+   SET 1097  : REM Halt PROG2
+   SET 1129  : REM Halt PROG3
+   SET 1161  : REM Halt PROG4
+   CLR 12032 
+   CLR 12033 
+   CLR 12040  : REM turn off air
+   INH -5646  : REM wait for EStop to be pulled out
+   SET 5647   : REM clear Estop latch
+   DWL .5 
+   CLR 8467   : REM axis0 kamr
+   CLR 8659   : REM axis6 kamr
+   CLR 8499   : REM axis1 kamr
+   CLR 8723   : REM axis8 kamr
+   CLR 8531   : REM axis2 kamr
+   CLR 8755   : REM axis9 kamr
+   CLR 8563   : REM axis3 kamr
+   CLR 8595   : REM axis4 kamr
+   CLR 8627   : REM axis5 kamr
+   DWL .5
+   CLR 522   : REM Master0 kam
+   CLR 554   : REM Master1 kam
+   CLR 586   : REM Master2 kam
+   CLR 618   : REM Master3 kam
+   CLR 650   : REM Master4 kam
+   DWL .5 
+   DRIVE ON AXIS0 AXIS1 AXIS2 AXIS3 AXIS4 AXIS5 AXIS6 AXIS8 AXIS9: REM turn Drives back on
+   DWL .2
+   SET 1032   : REM Run PROG0
+   DWL .5
+   SET 190  : REM Start AHC
+   GOTO loop
+   ENDIF
+ REM ****************** Z Found Plate, ABC Finding Plate *******************
+  IF ((BIT 190) AND (BIT 192)) : REM AHC has been activated, but haven't found gap
+   SET 151  : REM ESTOP occurred before finding plate
+   PRINT "ESTOP ABC Finding Plate"
+   SET 1097  : REM Halt PROG2
+   SET 1129  : REM Halt PROG3
+   SET 1161  : REM Halt PROG4
+   CLR 12032 
+   CLR 12033 
+   CLR 12040  : REM turn off air
+   INH -5646  : REM wait for EStop to be pulled out
+   SET 5647   : REM clear Estop latch
+   DWL .5 
+   CLR 8467   : REM axis0 kamr
+   CLR 8659   : REM axis6 kamr
+   CLR 8499   : REM axis1 kamr
+   CLR 8723   : REM axis8 kamr
+   CLR 8531   : REM axis2 kamr
+   CLR 8755   : REM axis9 kamr
+   CLR 8563   : REM axis3 kamr
+   CLR 8595   : REM axis4 kamr
+   CLR 8627   : REM axis5 kamr
+   DWL .5 
+   CLR 522   : REM Master0 kam
+   CLR 554   : REM Master1 kam
+   CLR 586   : REM Master2 kam
+   CLR 618   : REM Master3 kam
+   CLR 650   : REM Master4 kam
+   DWL .5 
+   DRIVE ON AXIS0 AXIS1 AXIS2 AXIS3 AXIS4 AXIS5 AXIS6 AXIS8 AXIS9: REM turn Drives back on
+   DWL .2
+   IF (BIT 134)
+     SET 1096
+     ENDIF
+   IF (BIT 135)
+     SET 1128
+     ENDIF
+   IF (BIT 136)
+     SET 1160
+     ENDIF
+   GOTO loop
+   ENDIF
+ REM ****************** Scanning *******************************
+  IF ((BIT 141) AND (BIT 211))
+   PRINT "ESTOP Scanning"
+   
+   ENDIF 
+ ENDIF 
+ GOTO loop
+ REM
+ REM **********************************************************************
+ REM
+ REM _CleanHeightSensors
+ REM
+ REM **********************************************************************
+ _CleanHeightSensors
+ JOG ACC AXIS0 10 
+ JOG ACC AXIS1 10 
+ JOG ACC AXIS4 5 
+ JOG DEC AXIS0 10 
+ JOG DEC AXIS1 10 
+ JOG DEC AXIS4 5 
+ JOG VEL AXIS0 4 
+ JOG VEL AXIS1 4 
+ JOG VEL AXIS4 2 
+ JOG REN AXIS0 AXIS1 AXIS4 
+ JOG ABS AXIS0 144 AXIS1 60 AXIS4 (-35) 
+ INH -792 : REM wait until axis0 jog active stops
+ INH -824 : REM wait until axis1 jog active stops
+ INH -920 : REM wait until axis4 jog active stops
+ JOG RES AXIS0 AXIS1 AXIS4 
+ INH -132 
+ JOG REN AXIS4 
+ JOG ABS AXIS4 (-5.5) 
+ INH -920 
+ JOG RES AXIS4 
+ RETURN 
+ ENDP 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

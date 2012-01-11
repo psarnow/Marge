@@ -1,0 +1,818 @@
+ PROGRAM 
+ REM PROGRAM1
+ REM *******************************************************
+ REM
+ REM 6 Headed Forming on MARGE Tower Forming Machine
+ REM
+ REM *******************************************************
+ REM 
+ REM Version 1.0
+ REM 20110317 PLS
+ REM
+ REM PARAMETERS
+ REM
+ DIM SV(40)
+ DIM LV(10)
+ DIM SA(5)
+ DIM SA0(500)
+ DIM SA1(500)
+ DIM SA2(500)
+ CLR 140
+ REM
+ REM
+ REM *********************Initialize***********************************************
+ REM
+ SET 1096 : REM RUN PROG2 Big Z and S
+ SET 1224 : REM RUN PROG6 Heating
+ SET 1256 : REM RUN PROG7 Error Recovery
+ DRIVE ON X
+ DRIVE ON U
+ DRIVE ON Y
+ DRIVE ON V
+ DWL .5
+ ACC 10
+ DEC 8
+ STP 10
+ VEL 5
+ REM  
+ IF (BIT 131)   : REM additional forming state
+   SET 143    : REM additional forming active
+   GOTO additionalforming
+ ELSE IF (BIT 130) : REM scanning active
+  GOTO scanning
+ ENDIF
+ REM *********************Initial Forming********************************************
+ REM
+ REM Find Tilt Angle
+ SV7 = ATAN((P23-P21)/(P22-P20+396.181)) : REM Tilt Angle
+ P15 = SV7
+ REM Find Initial X, Y, V points
+ SV8 = P21 + 298.029*SIN(SV7)     : REM Y2
+ SV9 = P20 - (SQRT(((596.058*SIN(SV7/2))**2) - ((298.029*SIN(SV7))**2))) : REM X2
+ REM
+ REM Find End X, Y, V points
+ SV11 = P23 - 98.152 * SIN(SV7) : REM Y3
+ SV12 = P22 + (SQRT(((196.304*SIN(SV7/2))**2 - (98.152*SIN(SV7))**2))) : REM X3
+ REM
+ REM *********************Determine Pathplan*****************************************
+ REM
+ REM
+ SV2 = P24         : REM get desired amount of bend
+ SV3 = SV2/P2        : REM get number of passes
+ SV3 = ROUND(SV3)      : REM round to a whole number
+ SV3 = SV3 - 1       : REM decrease passcount by 1...so we underform it
+ REM
+ P3 = SV3
+ IF (SV3 < 2)        : REM if we have less than 2 passes
+  SV5 = 0
+ ELSE
+  SV5 = P25/(SV3-1)     : REM spacing between passes
+  ENDIF
+ IF (NOT BIT 148)      : REM traverse in plus Y direction
+  SV5 = SV5
+  SA0(0) = SV8 - ((P25/2)*COS(SV7)) : REM starting Y position
+  SA1(0) = SV9 + ((P25/2)*SIN(SV7)) : REM starting X position
+ ELSE           : REM traverse in minus Y direction
+  SV5 = -SV5
+  SA0(0) = SV8 + ((P25/2)*COS(SV7))
+  SA1(0) = SV9 - ((P25/2)*SIN(SV7)) : REM starting X position
+  ENDIF
+ SA2(0) = SA0(0) - 200*TAN(SV7)  : REM starting V position
+ LV0 = 1         : REM set point counter to 1
+ LV1 = 0         : REM set pass counter to 0
+ IF (NOT BIT 148)      : REM traverse in plus Y direction
+  SA0(LV0) = SV11 - ((P25/2)*COS(SV7)) : REM Y point
+  SA1(LV0) = SV12 + ((P25/2)*SIN(SV7)) : REM X point
+ ELSE
+  SA0(LV0) = SV11 + ((P25/2)*COS(SV7)) : REM Y point
+  SA1(LV0) = SV12 - ((P25/2)*SIN(SV7)) : REM X point
+  ENDIF
+ SA2(LV0) = SA0(LV0) - 200*TAN(SV7) : REM V point
+ LV0 = LV0 + 1       : REM increment point counter
+ LV1 = LV1 + 1       : REM increment pass counter
+ IF (LV1 < SV3)
+  SA0(LV0) = (SA0(LV0-1)) + (SV5*COS(SV7))
+  SA1(LV0) = (SA1(LV0-1)) - ((SV5)*SIN(SV7))
+  SA2(LV0) = SA0(LV0) - 200*TAN(SV7)
+  LV0 = LV0 + 1
+ ELSE
+  SV6 = LV0         : REM count points
+  GOTO startforming
+ ENDIF
+ _passcounter
+ SA0(LV0) = (SA0(LV0-3)) + (SV5*COS(SV7))
+ SA1(LV0) = (SA1(LV0-3)) - ((SV5)*SIN(SV7))
+ SA2(LV0) = SA0(LV0) - 200*TAN(SV7)
+ LV0 = LV0 + 1       : REM increment point counter
+ LV1 = LV1 + 1       : REM increment pass counter
+ IF (LV1 < SV3)
+  SA0(LV0) = (SA0(LV0-1)) + (SV5*COS(SV7))
+  SA1(LV0) = (SA1(LV0-1)) - ((SV5)*SIN(SV7))
+  SA2(LV0) = SA0(LV0) - 200*TAN(SV7)
+  LV0 = LV0 + 1
+ ELSE
+  SV6 = LV0         : REM count points
+  GOTO startforming
+ ENDIF
+ GOTO passcounter
+ REM
+ REM *********************Start Forming*************************************************
+ REM
+ _startforming
+ REM JOG RES X
+ REM JOG RES Y
+ REM JOG RES V
+ REM JOG REN V
+ LV2 = 0
+ IF ((BIT150) AND (NOT BIT151)) : REM ESTOP has ocurred
+   LV2 = P6
+   ENDIF
+ INH -580
+ IF ((BIT150) AND (NOT BIT151)) : REM ESTOP has ocurred
+   PRINT "GOTO P7,P8"
+   P9 = P9 + 1
+   IF (P9 > 1)
+    SET 152
+    ENDIF
+   X(P7) Y(P8) V(P12)
+   REM LV2 = LV2 - 1 
+ ELSE
+   PRINT SA1(0), SA0(0), SA2(0)
+   X(SA1(0)) Y(SA0(0)) V(SA2(0)) : REM go to initial XY position
+   LV2 = LV2 + 1
+   ENDIF
+ INH -548
+ INH -5646   : REM wait for EStop to be pulled out
+ VEL = P1
+ IF ((BIT 150) AND (NOT BIT 151)) : REM ESTOP has ocurred
+  IF (BIT 167) : REM if we are in STOP/RESUME mode
+   SET 190
+   CLR 167
+  ELSE
+     SET 192     : REM Z has already found plate
+    ENDIF
+ ELSE
+   SET 190     : REM start AHC
+   ENDIF
+ INH 231      : REM wait for heating to start 
+ INH -149   : REM Wait for Heating to Resume from PS Fault if necessary
+ IF (BIT 150)
+  CLR 150  : REM **CLEAR ESTOP flag here**
+  CLR 151
+  IF (NOT BIT 152)
+   LV2 = LV2 - 1
+   P6 = P6 -1
+   P10 = P10 - 1
+   ENDIF
+  ENDIF
+ P30 = (SA1(1)-SA1(0))/P1 * P3 : REM determine total forming time
+ DWL (P71)      : REM initial dwell
+ SET 146        : REM Start Traveling thru Pathplan
+ P6916 = 0  : REM restart the global clock 
+ REM   
+ _loop
+ REM
+ IF (BIT 146) 
+    X(SA1(LV2)) Y(SA0(LV2)) V(SA2(LV2)) : REM go to next XYV position
+    PRINT SA1(LV2), SA0(LV2), SA2(LV2)
+    P4 = (SA1(LV2))
+    P5 = (SA0(LV2))
+    P13 = (SA2(LV2))
+    LV2 = LV2 + 1
+    P6 = LV2     : REM get Point Number
+    P10 = P10 + 1
+    CLR 152
+    P9 = 0
+    IF (P12315 > 0) : REM get X velocity direction
+     _ramp1
+     IF (((P12295/P12375)+(P11+.01)) < P4)
+      GOTO ramp1
+     ENDIF
+    ELSE
+     _ramp2
+     IF (((P12295/P12375)-(P11+.01)) > P4)
+      GOTO ramp2
+     ENDIF
+    ENDIF
+    SET 222  : REM pause or ramp down heating
+    PRINT "ramp down heating"
+    INH -516
+    INH -149
+    INH -792
+    INH -824
+    INH -7704
+   INH -5646   : REM wait for EStop to be pulled out
+   IF (LV2 > SV6-1)
+    PRINT "ENDPROGRAM1a"
+     GOTO endprogram1
+   ENDIF   
+    X(SA1(LV2)) Y(SA0(LV2)) V(SA2(LV2)) : REM go to next XYV position
+    PRINT SA1(LV2), SA0(LV2), SA2(LV2)
+    P4 = (SA1(LV2))
+    P5 = (SA0(LV2))
+    P13 = (SA2(LV2))
+    LV2 = LV2 + 1
+    P6 = LV2     : REM get Point Number
+    CLR 152
+    P9 = 0
+    INH -516
+    INH -149
+    INH -792
+    INH -824
+    INH -7704
+    SET 233     : REM unpause heating    
+  INH -5646   : REM wait for EStop to be pulled out
+  IF (LV2 > SV6-1)
+   PRINT "endprogram1b"
+     GOTO endprogram1
+    ENDIF
+ ENDIF
+ REM
+ GOTO loop
+ REM
+ REM
+ REM ******************** Scanning **************************************************
+ REM
+ _scanning
+ REM ********************************************************************************
+ PRINT "Start Scanning"
+ SV7 = ATAN((P23-P21)/(P22-P20+396.181)) : REM Tilt Angle
+ P15 = SV7
+ LV5 = 0
+ _newscanpt
+ LV6 = 0
+ LV7 = 0
+ SV13 = 0    : REM offset X for rescan
+ SV14 = 0    : REM added length on Y for rescan
+ VEL 1
+ SV33 = 0.35    : REM set scan velocity 
+ SV34 = SV33    : REM get initial scan velocity
+ P14 = SV33
+ _rescan
+ IF (LV5 = 0)
+  SV31 = (P21+SV14) + 298.029*SIN(P15)      : REM Y
+  SV32 = (P20+4+SV13) - (SQRT(((596.058*SIN(P15/2))**2) - ((298.029*SIN(P15))**2))) : REM X
+ ELSE
+  SV31 = (P23+SV14) - 98.152 * SIN(P15)  : REM Y3
+  SV32 = (P22-4-SV13) + (SQRT(((196.304*SIN(P15/2))**2 - (98.152*SIN(P15))**2))) : REM X3
+ ENDIF
+ IF (P23 > P21)
+  SV23 = SV32 - ((2.3+(P25/2))*SIN(P15))   : REM AX position
+  SV24 = SV31 + ((2.3+(P25/2))*COS(P15))  : REM AY position
+  SV35 = SV24 - 200*TAN(P15)       : REM AV position
+  REM
+  SV25 = SV32 - ((1.0+(P25/2))*SIN(P15))   : REM BX position
+  SV26 = SV31 + ((1.0+(P25/2))*COS(P15))  : REM BY position
+  SV36 = SV26 - 200*TAN(P15)       : REM BV position
+  REM
+  REM
+  SV27 = SV32 + ((1.0+(P25/2))*SIN(P15))   : REM CX position
+  SV28 = SV31 - ((1.0+(P25/2))*COS(P15))  : REM CY position
+  SV37 = SV28 - 200*TAN(P15)       : REM CV position
+  REM
+  SV29 = SV27 + ((2.3+(P25/2))*SIN(P15))   : REM DX position
+  SV30 = SV28 - ((2.3+(P25/2))*COS(P15))  : REM DY position
+  SV38 = SV30 - 200*TAN(P15)       : REM DV position
+ ELSE
+  SV23 = SV32 + ((2.3+(P25/2))*SIN(P15))   : REM AX position
+  SV24 = SV31 + ((2.3+(P25/2))*COS(P15))  : REM AY position
+  SV35 = SV24 + 200*TAN(P15)       : REM AV position
+  REM
+  SV25 = SV32 + ((1.0+(P25/2))*SIN(P15))   : REM BX position
+  SV26 = SV31 + ((1.0+(P25/2))*COS(P15))  : REM BY position
+  SV36 = SV26 + 200*TAN(P15)       : REM BV position
+  REM
+  REM
+  SV27 = SV32 - ((1.0+(P25/2))*SIN(P15))   : REM CX position
+  SV28 = SV31 - ((1.0+(P25/2))*COS(P15))  : REM CY position
+  SV37 = SV28 + 200*TAN(P15)       : REM CV position
+  REM
+  SV29 = SV27 - ((2.3+(P25/2))*SIN(P15))   : REM DX position
+  SV30 = SV28 - ((2.3+(P25/2))*COS(P15))  : REM DY position
+  SV38 = SV30 + 200*TAN(P15)       : REM DV position
+ ENDIF
+ IF (LV7 = 2)
+  PRINT "GOTO second line"
+  GOTO secondline
+ ENDIF 
+ _firstline
+ IF (LV5 > 0)
+ VEL 1
+ ELSE
+  VEL 5
+  ENDIF
+ PRINT "Moving to start first line" 
+ PRINT SV23, SV24, SV35
+ X(SV23) Y(SV24) V(SV35) : REM Goto Start Pt
+ VEL (SV33)     : REM set scan velocity
+ INH 104      : REM wait for sample trigger to set
+ X(SV25) Y(SV26) V(SV36)
+ INH 249      : REM wait until prog8 is done calculating
+ CLR 249
+ IF (BIT 248)
+  CLR 248
+  LV6 = LV6 + 1
+  SV13 = SV13 + .2
+  SV14 = SV14 + .25
+  SV33 = SV33 + .025
+  IF (SV33 > 1)
+     SV33 = 1
+    ENDIF
+    PRINT "GOTO rescan"
+  GOTO rescan
+ ENDIF
+ REM Scan Second Line
+ LV7 = 2     : REM set line count to 2
+ SV33 = SV34     : REM initialize scan velocity
+ LV6 = 0     : REM initialize rescan offsets
+ SV13 = 0
+ SV14 = 0
+ VEL (SV33)     : REM set scan velocity
+ GOTO rescan    : REM go back with SV13,14 back at 0
+ _secondline
+ VEL 1
+ X(SV27) Y(SV28) V(SV37) : REM goto start of next line 
+ INH -548
+ SET 251
+ INH 104     : REM wait for sample trigger to set
+ X(SV29) Y(SV30) V(SV38)
+ VEL 1
+ X(SV27) Y(SV28) V(SV37) : REM goto start of next line while prog8 crunches numbers
+ INH 249     : REM wait until prog8 is done calculating
+ CLR 249
+ IF (BIT 248)
+  CLR 248
+  LV6 = LV6 + 1
+  SV13 = SV13 + .2
+  SV14 = SV14 + .25
+  SV33 = SV33 + .025
+  IF (SV33 > 1)
+     SV33 = 1
+    ENDIF
+    PRINT "GOTO rescan"
+  GOTO rescan
+ ENDIF
+ INH 250     : REM wait for Prog8 to finish calcs
+ CLR 250
+ IF (BIT 142)
+  GOTO additionalforming
+ ELSE
+  LV5 = LV5 + 1
+  GOTO newscanpt
+ ENDIF
+ REM 
+ REM ********************Additional Forming *******************************************
+ REM
+ _additionalforming
+ REM *********************Determine Pathplan*****************************************
+ REM
+ INH 131   : REM wait for Prog0 to analyze scan
+ 
+ 
+ 
+ REM Find Tilt Angle
+ SV7 = ATAN((P23-P21)/(P22-P20+396.181)) : REM Tilt Angle
+ REM Find Initial X, Y, V points
+ SV8 = P21 + 298.029*SIN(SV7)     : REM Y2
+ SV9 = P20 - (SQRT(((596.058*SIN(SV7/2))**2) - ((298.029*SIN(SV7))**2))) : REM X2
+ REM
+ REM Find End X, Y, V points
+ SV11 = P23 - 98.152 * SIN(SV7) : REM Y3
+ SV12 = P22 + (SQRT(((196.304*SIN(SV7/2))**2 - (98.152*SIN(SV7))**2))) : REM X3
+ 
+ 
+ 
+ REM
+ IF (P27 <> P28)
+  SV2 = P27 - P28
+  IF (SV2 > 0)
+    SV3 = P27 : REM get max number of passes
+  ELSE
+    SV3 = P28
+  ENDIF
+ ELSE
+  SV3 = P27
+  P3 = SV3
+ ENDIF
+ IF (SV3 < 2)        : REM if we have less than 2 passes
+   SV5 = 0
+ ELSE
+   SV5 = P25/(SV3-1)     : REM spacing between passes
+ ENDIF
+ IF (NOT BIT 148)      : REM traverse in plus Y direction
+  SV5 = SV5
+  SA0(0) = SV8 - ((P25/2)*COS(SV7)) : REM starting Y position
+  SA1(0) = SV9 + ((P25/2)*SIN(SV7)) : REM starting X position
+ ELSE           : REM traverse in minus Y direction
+  SV5 = -SV5
+  SA0(0) = SV8 + ((P25/2)*COS(SV7))
+  SA1(0) = SV9 - ((P25/2)*SIN(SV7)) : REM starting X position
+ ENDIF
+ SA2(0) = SA0(0) - 200*TAN(SV7)  : REM starting V position
+ LV0 = 1         : REM set point counter to 1
+ LV1 = 0         : REM set pass counter to 0
+ IF (NOT BIT 148)      : REM traverse in plus Y direction
+  SA0(LV0) = SV11 - ((P25/2)*COS(SV7)) : REM Y point
+  SA1(LV0) = SV12 + ((P25/2)*SIN(SV7)) : REM X point
+ ELSE
+  SA0(LV0) = SV11 + ((P25/2)*COS(SV7)) : REM Y point
+  SA1(LV0) = SV12 - ((P25/2)*SIN(SV7)) : REM X point
+  ENDIF
+ SA2(LV0) = SA0(LV0) - 200*TAN(SV7) : REM V point
+ LV0 = LV0 + 1       : REM increment point counter
+ LV1 = LV1 + 1       : REM increment pass counter
+ IF (LV1 < SV3)
+  SA0(LV0) = (SA0(LV0-1)) + (SV5*COS(SV7))
+  SA1(LV0) = (SA1(LV0-1)) - ((SV5)*SIN(SV7))
+  SA2(LV0) = SA0(LV0) - 200*TAN(SV7)
+  LV0 = LV0 + 1
+ ELSE
+  SV6 = LV0         : REM count points
+  GOTO startforming2
+ ENDIF
+ _passcounter2
+ SA0(LV0) = (SA0(LV0-3)) + (SV5*COS(SV7))
+ SA1(LV0) = (SA1(LV0-3)) - ((SV5)*SIN(SV7))
+ SA2(LV0) = SA0(LV0) - 200*TAN(SV7)
+ LV0 = LV0 + 1       : REM increment point counter
+ LV1 = LV1 + 1       : REM increment pass counter
+ IF (LV1 < SV3)
+  SA0(LV0) = (SA0(LV0-1)) + (SV5*COS(SV7))
+  SA1(LV0) = (SA1(LV0-1)) - ((SV5)*SIN(SV7))
+  SA2(LV0) = SA0(LV0) - 200*TAN(SV7)
+  LV0 = LV0 + 1
+ ELSE
+  SV6 = LV0         : REM count points
+  GOTO startforming2
+ ENDIF
+ GOTO passcounter2
+ REM
+ REM *********************Start Forming2*************************************************
+ REM
+ _startforming2
+ JOG RES X
+ JOG RES Y
+ JOG RES V
+ LV2 = 0
+ IF ((BIT150) AND (NOT BIT151)) : REM ESTOP has ocurred
+   LV2 = P6
+   ENDIF
+ INH -580
+ IF ((BIT150) AND (NOT BIT151)) : REM ESTOP has ocurred
+   PRINT "GOTO P7,P8"
+   P9 = P9 + 1
+   IF (P9 > 1)
+    SET 152
+    ENDIF
+   X(P7) Y(P8) V(P12)
+   REM LV2 = LV2 - 1   
+   PRINT "GOTO Initial XY"
+   X(SA1(0)) Y(SA0(0)) V(SA2(0)) : REM go to initial XYV position
+   LV2 = LV2 + 1
+   ENDIF
+ INH -516
+ INH -5646   : REM wait for EStop to be pulled out
+ VEL = P1
+ IF ((BIT 150) AND (NOT BIT 151)) : REM ESTOP has ocurred
+    SET 192       : REM Z has already found plate
+ ELSE
+   IF (P27 > 0)
+     SET 134 : REM use Head A
+     SET 135 : REM use Head B
+     SET 136 : REM use head C
+    ELSE 
+     CLR 134 : REM dont use Head A
+     CLR 135 : REM dont use Head B
+     CLR 136 : REM dont use head C
+    ENDIF
+   IF (P28 > 0)
+     SET 161 : REM use head D
+     SET 162 : REM use head E
+     SET 163 : REM use head F
+    ELSE
+     CLR 161
+     CLR 162
+     CLR 163
+    ENDIF
+    SET 190     : REM start AHC
+ ENDIF
+ INH 231      : REM wait for heating to start 
+ IF (BIT 150)
+   CLR 150  : REM **CLEAR ESTOP flag here**
+   CLR 151
+   IF (NOT BIT 152)
+     LV2 = LV2 - 1
+     P6 = P6 -1
+     P10 = P10 - 1
+    ENDIF
+ ENDIF 
+ DWL (P71)     : REM initial dwell
+ SET 146       : REM Start Traveling thru Pathplan 
+ REM   
+ _loop2
+ REM
+ IF (BIT 146)
+  IF (NOT BIT 145)    : REM go to next XY position
+    X(SA1(LV2)) Y(SA0(LV2)) : REM V(SA0(LV2))
+    P4 = (SA1(LV2))
+    P5 = (SA0(LV2))
+    LV2 = LV2 + 1
+    P6 = LV2     : REM get Point Number
+    P10 = P10 + 1
+    CLR 152
+    P9 = 0
+        IF (P12315 > 0) : REM get X velocity direction
+     _ramp5
+     IF (((P12295/P12375)+(P11+.01)) < P4)
+      GOTO ramp5
+     ENDIF
+    ELSE
+     _ramp6
+     IF (((P12295/P12375)-(P11+.01)) > P4)
+      GOTO ramp6
+     ENDIF
+    ENDIF
+    SET 222  : REM pause or ramp down heating
+    INH -516
+    INH -149
+    INH -792
+    INH -824
+    INH -7704
+    LV3 = LV3 + 1 : REM side 1 pass counter
+    LV4 = LV4 + 1 : REM side 2 pass counter
+  ELSE
+    X(SA0(LV2)) Y(SA1(LV2)) : REM V(SA1(LV2))
+    P4 = (SA0(LV2))
+    P5 = (SA1(LV2))
+    PRINT "go to next pt"
+    LV2 = LV2 + 1
+    P6 = LV2     : REM get Point Number
+    P10 = P10 + 1
+    CLR 152
+    P9 = 0
+    IF (P12571 > 0) : REM get Y velocity direction
+     _ramp7
+     IF (((P12551/P12631)+(P11+.01)) < P5)
+      GOTO ramp7
+     ENDIF
+    ELSE
+     _ramp8
+     IF (((P12551/P12631)-(P11+.01)) > P5)
+      GOTO ramp8
+     ENDIF
+    ENDIF
+    SET 222  : REM pause or ramp down heating
+    PRINT "ramp down heating"
+   INH -516
+   INH -149
+   INH -792
+   INH -824
+   INH -7704
+   LV3 = LV3 + 1 : REM side 1 pass counter
+   LV4 = LV4 + 1 : REM side 2 pass counter
+    ENDIF
+  INH -5646   : REM wait for EStop to be pulled out
+  IF (LV2 > SV6-1)
+    GOTO endprogram1
+    ENDIF
+  IF (LV3 > (P27 - 1))
+   CLR 134   : REM turn head A off
+   CLR 12038  : REM turn coil A off
+   CLR 193   : REM clear AHC A
+   CLR 135   : REM turn head B off
+   CLR 12039  : REM turn coil B off
+   CLR 199   : REM clear AHC B
+   ENDIF
+  IF (LV4 > (P28 - 1))
+   CLR 136   : REM turn head C off
+   CLR 12046  : REM turn coil C off
+   CLR 205   : REM clear AHC C
+   CLR 135   : REM turn head B off
+   CLR 12039  : REM turn coil B off
+   CLR 199   : REM clear AHC B
+   ENDIF
+  IF (NOT BIT 145)    : REM go to next XY position
+    X(SA1(LV2)) Y(SA0(LV2)) : REM V(SA0(LV2))
+    P4 = (SA1(LV2))
+    P5 = (SA0(LV2))
+    LV2 = LV2 + 1
+    P6 = LV2     : REM get Point Number
+    CLR 152
+    P9 = 0
+   INH -516
+   INH -149
+   INH -792
+   INH -824
+   INH -7704
+   SET 233     : REM unpause heating   
+  ELSE
+    X(SA0(LV2)) Y(SA1(LV2)) : REM V(SA1(LV2))
+    P4 = (SA0(LV2))
+    P5 = (SA1(LV2))
+    LV2 = LV2 + 1
+    P6 = LV2     : REM get Point Number
+    CLR 152
+    P9 = 0
+   INH -516
+   INH -149
+   INH -792
+   INH -824
+   INH -7704
+   SET 233     : REM unpause heating
+    ENDIF
+ INH -5646   : REM wait for EStop to be pulled out
+ IF (LV2 > SV6-1)
+    GOTO endprogram1
+    ENDIF
+ ENDIF
+ REM
+ GOTO loop2
+ REM
+ REM ********************Forming Complete**********************************************
+ _endprogram1
+ PRINT "ending program"
+ INH -548  : REM for master 1 to stop moving
+ CLR 190 : REM Clear AHC, also stops heating
+ CLR 193
+ CLR 199
+ CLR 205
+ CLR 211
+ CLR 216
+ CLR 222
+ CLR 146
+ CLR 152
+ P6 = 0
+ P9 = 0
+ P10 = 0
+ LV3 = 0
+ LV4 = 0
+ IF (BIT 143)
+   CLR 131 : ReM addition forming not active
+    CLR 143 : REM addition forming not active
+    SET 144 : REM Additional Forming Complete
+ ELSE
+    SET 140 : REM Initial Forming State Complete
+ ENDIF
+ INH 16194     : REM wait for Z to home
+ GOTO scanning
+ ENDP
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

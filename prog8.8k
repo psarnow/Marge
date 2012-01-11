@@ -1,0 +1,584 @@
+ PROGRAM 
+ REM
+ REM *****************************************************************
+ REM Tower Plate Measuring Program
+ REM *****************************************************************
+ REM
+ REM Version 1.0 PLS 20110317
+ REM
+ CLEAR 
+ DIM LA(6)
+ REM the array length in the follow section determines how long the sampling will be
+ REM the sampling rate is 100ms. So the sample length is 100ms * 100 buffer length = 10 seconds
+ REM make the necessary modification to the following array length to lengthen or shorten the sample buffer length
+ DIM LA0(100) : REM x limit to 100 sample
+ DIM LA1(100) : REM y
+ DIM LA2(100) : REM z
+ DIM LA3(100) : REM x'
+ DIM LA4(100) : REM y'
+ DIM LA5(100) : REM z'
+ DIM SA(25) 
+ DIM SA0(100) : REM z
+ DIM SA1(100) : REM z'
+ DIM SA2(100) : REM z'
+ DIM SA3(100) : REM z'
+ DIM SA4(100) : REM z'
+ DIM SA5(100) : REM z'
+ DIM SA6(100) 
+ DIM SA7(100) 
+ DIM SA8(100) 
+ DIM SA9(100) 
+ DIM SA10(10) 
+ DIM SA11(10) 
+ DIM SA12(10) 
+ DIM SA13(100) : REM z'
+ DIM SA14(100) : REM z'
+ DIM SA15(100) : REM z'
+ DIM SA16(100) 
+ DIM SA17(100) 
+ DIM SA18(100) 
+ DIM SA19(100) 
+ DIM SA20(100) 
+ DIM SA21(100) 
+ DIM SA22(100) 
+ DIM LV(10) 
+ DIM SV(40) 
+ REM INH 141
+ CLR 190     : REM Scanning AHC
+ CLR 200     : REM Scanning AHC Standoff found
+ SET 1096    : REM RUN PROG2 AHC
+ INH 1088  : REM Prog2 Running
+ REM
+ LV1= 0   : REM reset loop counter 
+ LV2= 0 
+ LV3= 0 
+ _newscanpt
+ REM
+ LV3= LV3+1 
+ SAMP CLEAR 
+ SAMP0 SRC P12290   : REM x actual position
+ SAMP1 SRC P12546   : REM y actual position
+ IF ((BIT 134) AND (LV2 = 0))
+  SAMP2 SRC P6408   : REM analog channel 0 head A
+ ELSE IF ((BIT 163) AND (LV2 > 0))   
+  SAMP2 SRC P6488   : REM analog channel 5 head F
+  ENDIF
+ CLR 106       : REM select automatic sampling
+ P6915= 45       : REM ms per sample
+ CLR 245 
+ SAMP TRG 245     : REM define trigger
+ REM
+ REM *******************************************************************
+ REM move to start of the first line to start data collecting
+ REM
+ REM
+ _firstline
+ INH -548      : REM wait until Master1 motion stops
+ INH -856      : REM wait until axis2 jog stops
+ SET 190      : REM Activate Scanning AHC
+ INH 200      : REM wait for proper standoff
+ PAUSE PROG 2     : REM tell prog2 to stay still
+ DWL 0.7 
+ REM ********************************************************************
+ SAMP0 BASE LA0  : REM x
+ SAMP1 BASE LA1  : REM y
+ SAMP2 BASE SA2  : REM A sensor
+ PRINT "Sampling line 1 starting" 
+ SET 104    : REM arm trigger (buffer A), and Prog1 starts motion
+ REM
+ REM move to end of the first line to start data collecting
+ DWL .2       : REM let motion get going before sampling
+ SET 245
+ REM
+ INH -104      : REM wait until the sample are collected in Buffer A
+ CLR 245 
+ REM 
+ REM convert x and y and sensor to inches
+ PRINT "LINE1 " 
+ FOR LV0= 0 TO  99 STEP 1 
+   SA0(LV0) = LA0(LV0)/P12375 
+   SA1(LV0) = LA1(LV0)/P12631 
+   SA2(LV0) = SA2(LV0)/1000 
+   SA1(LV0) = SA1(LV0) + (SA0(LV0)*TAN(P15)) : REM convert Y points from diagonal
+   PRINT SA1(LV0),SA2(LV0) 
+   NEXT  
+ REM
+ REM do line 1 calculations here...if the R Squared is bad then we need to rescan
+ REM and move x just a hair for a better line
+ REM
+ REM ************************************************************
+ REM
+ REM Line 1 Calculations
+ REM
+ REM ************************************************************
+ REM get average of all the X, Y, A(sensor) pts 
+ SV0= 0 : SV1= 0 : SV2= 0 
+ FOR LV0= 0 TO  99 STEP 1 
+   SV1= SV1+SA1(LV0)  : REM y points
+   SV2= SV2+SA2(LV0)  : REM sensor points
+   NEXT  
+ SV1= SV1/100      : REM average y
+ SV2= SV2/100      : REM average sensor
+ REM
+ REM calculate top and bottom of equation for each set of pts
+ FOR LV0= 0 TO  99 STEP 1 
+    SA6(LV0) = (SA1(LV0)-SV1)*(SA2(LV0)-SV2) 
+    SA7(LV0) = (SA1(LV0)-SV1)**2 
+    NEXT  
+ REM average each
+ SV3= 0 : SV4= 0 
+ FOR LV0= 0 TO  99 STEP 1 
+   SV3= SV3+SA6(LV0) 
+   SV4= SV4+SA7(LV0) 
+   NEXT  
+ SV3= SV3/100 
+ SV4= SV4/100 
+ SV5= SV3/SV4      : REM slope1
+ SV19= SV2-(SV5*SV1)   : REM y intercept1
+ SV6= ATAN(SV5)     : REM get angle of line
+ IF (LV2 > 0)
+   P95 = SV6
+ ELSE
+   P90 = SV6
+ ENDIF
+ PRINT "Angle1 ",SV6 
+ FOR LV0= 0 TO  99 STEP 1    : REM get predicted values
+    SA17(LV0) = SV5*SA1(LV0)+SV19 
+    NEXT  
+ SV20= 0 
+ FOR LV0= 0 TO  99 STEP 1    : REM get error values
+   SA18(LV0) = SA17(LV0)-SA2(LV0) 
+   SA21(LV0) = (SA18(LV0))**2  : REM Square error
+   SV20= SV20+SA21(LV0)     : REM sum squared error values
+   NEXT  
+ SV21= 0 
+ FOR LV0= 0 TO  99 STEP 1    : REM Distance b/n Z & Mean
+   SA19(LV0) = SA2(LV0)-SV2 
+   SA20(LV0) = (SA19(LV0))**2  : REM square mean distances
+   SV21= SV21+SA20(LV0)     : REM sum squared mean distances
+   NEXT  
+ SV22= (SV21-SV20)/SV21     : REM R-Squared Value
+ IF (LV2 > 0)
+   P96 = SV22
+ ELSE
+   P91 = SV22
+ ENDIF
+ PRINT "R-Squared1= ";SV22
+ IF ((ABSF(SV6) < 0.5) AND (SV22 < 0.3) AND (ABSF(SV6) > 0.20))
+   SET 248
+   SET 249
+   GOTO firstline
+ ENDIF  
+ IF  ((SV22 < 0.88) AND (ABSF(SV6) > 2)) 
+   SET 248
+   SET 249
+   GOTO firstline
+ ENDIF  
+ IF  ((SV22 < 0.8) AND (ABSF(SV6) > 1.3) AND (ABSF(SV6) < 2)) 
+   SET 248
+   SET 249
+   GOTO firstline
+ ENDIF  
+ IF  ((SV22 < 0.4) AND (ABSF(SV6) > 0.5) AND (ABSF(SV6) < 1.3)) 
+   SET 248
+   SET 249
+   GOTO firstline
+ ENDIF  
+ SET 249
+ RESUME PROG 2
+ _secondline
+ REM *******************************************************************
+ REM
+ REM move to start of the second line to start data collecting
+ SAMP0 BASE LA3     : REM x
+ SAMP1 BASE LA4     : REM y
+ SAMP2 BASE SA5     : REM A
+ PRINT "Sampling line 2 starting" 
+ INH 251   : REM wait for Program1 to be ready
+ CLR 251
+ INH -548      : REM wait until Master1 motion stops
+ INH -856      : REM wait until axis2 jog stops
+ PAUSE PROG 2     : REM tell prog2 to stay still
+ DWL 0.7 
+ SET 104    : REM arm trigger (buffer B)
+ REM
+ REM move to end of the second line to start data collecting
+ DWL .2       : REM let motion get going before sampling
+ SET 245  
+ REM
+ INH -104       : REM wait until the sample are collected in Buffer A
+ CLR 245 
+ REM 
+ REM convert to inches
+ PRINT "LINE2 " 
+ FOR LV0= 0 TO  99 STEP 1 
+   SA3(LV0) = LA3(LV0)/P12375      : REM x points
+   SA4(LV0) = LA4(LV0)/P12631      : REM y points
+   SA5(LV0) = SA5(LV0)/1000      : REM sensor points
+   SA4(LV0) = SA4(LV0) + (SA3(LV0) * TAN(P15)) : REM convert angled points to Y
+   NEXT  
+ REM
+ REM Second Line
+ REM get average of all the X, Y, and Z(sensor) pts 
+ SV8= 0 : SV9= 0 
+ FOR LV0= 0 TO  99 STEP 1  
+  SV8= SV8+SA4(LV0) 
+  SV9= SV9+SA5(LV0) 
+  NEXT  
+ SV8= SV8/100      : REM average y
+ SV9= SV9/100      : REM average sensor
+ REM
+ REM calculate top and bottom of equation for each set of pts
+ FOR LV0= 0 TO  99 STEP 1 
+    SA8(LV0) = (SA4(LV0)-SV8)*(SA5(LV0)-SV9) 
+    SA9(LV0) = (SA4(LV0)-SV8)**2 
+    NEXT    
+ REM average each
+ SV10= 0 : SV11= 0 
+ FOR LV0= 0 TO  99 STEP 1 
+   SV10= SV10+SA8(LV0) 
+   SV11= SV11+SA9(LV0) 
+   NEXT  
+ SV10= SV10/100 
+ SV11= SV11/100 
+ SV12= SV10/SV11     : REM slope2
+ SV15= SV9-(SV12*SV8)   : REM y intercept  
+ SV13= ATAN(SV12)     : REM get angle of line
+ IF (LV2 > 0)
+   P97 = SV13
+ ELSE
+   P92 = SV13
+ ENDIF
+ PRINT "Angle2 ";SV13 
+ FOR LV0= 0 TO  99 STEP 1    : REM get predicted values
+   IF  (SA0(0) = SA0(1)) 
+     SA13(LV0) = SV12*SA4(LV0)+SV15 
+    ELSE  
+     SA13(LV0) = SV12*SA3(LV0)+SV15 
+    ENDIF  
+   NEXT  
+ SV16= 0 
+ FOR LV0= 0 TO  99 STEP 1    : REM get error values
+   SA14(LV0) = SA13(LV0)-SA5(LV0) 
+   SA22(LV0) = (SA14(LV0))**2  : REM square error values
+   SV16= SV16+SA22(LV0)     : REM sum square error values
+   NEXT  
+ SV17= 0 
+ FOR LV0= 0 TO  99 STEP 1    : REM Distance b/n Z & Mean
+   SA15(LV0) = SA5(LV0)-SV9 
+   SA16(LV0) = SA15(LV0)**2   : REM square mean distances
+   SV17= SV17+SA16(LV0)     : REM sum squared mean distances
+   NEXT  
+ SV18= (SV17-SV16)/SV17     : REM R-Squared Value
+ IF (LV2 > 0)
+   P98 = SV18
+ ELSE
+   P93 = SV18
+ ENDIF
+ PRINT "R-Squared2 ";SV18 
+ IF ((SV18 < 0.88) AND (ABSF(SV13) > 2.0))
+ SET 248
+   SET 249 
+   GOTO secondline
+ ENDIF  
+ IF ((SV18 < 0.3) AND (ABSF(SV13) < 0.5) AND (ABSF(SV13) > 0.2))
+   SET 248
+   SET 249
+   GOTO secondline
+  ENDIF  
+ IF ((SV18 < 0.8) AND (ABSF(SV13) > 1.3) AND (ABSF(SV13) < 2))
+   SET 248
+   SET 249
+   GOTO secondline
+ ENDIF  
+ IF ((SV18 < 0.4) AND (ABSF(SV13) > 0.5) AND (ABSF(SV13) < 1.3))
+   SET 248
+   SET 249
+   GOTO secondline
+ ENDIF  
+ REM
+ SET 249
+ RESUME PROG 2
+ SV14= SV13-SV6      : REM difference in angles
+ SV14= ABSF(SV14)     : REM convert to absolute value
+ IF (LV2 > 0)
+   P99 = SV14
+ ELSE
+   P94 = SV14
+ ENDIF
+ PRINT "Angle between lines ";SV14 
+ SA12(LV2) = SV14 
+ LV2= LV2+1 
+ IF  (LV2 >1) 
+   CLR 190       : REM clr ahc scanning
+   LV1= 0 
+   SET 142       : REM flag indicating scan is complete
+   SET 250
+ ELSE  
+  SET 250
+   GOTO newscanpt
+ ENDIF 
+ REM
+ REM ****************end program**************************
+ CLR 190     : REM clear AHC
+ CLR 200 
+ IF (BIT 141)
+   SET 142     : REM measuring complete
+ ELSE IF (BIT 155)
+   SET 156
+ ENDIF
+ ENDP 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

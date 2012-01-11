@@ -1,0 +1,279 @@
+PROGRAM 
+ REM *******************************************************
+ REM Mini Z Stations -- C and D-- Automatic Height Control
+ REM 6 Headed Forming on MARGE 
+ REM
+ REM *******************************************************
+ REM Version 1.0
+ REM 20110401 PLS added station B
+ REM 20110317 PLS
+ REM
+ DIM SV(5)
+ DIM LV(6)
+ REM 
+ REM INITIALIZE
+ CLR 205
+ CLR 206
+ CLR 207
+ CLR 208
+ CLR 211
+ CLR 212
+ CLR 213
+ DRIVE ON C
+ DRIVE ON D
+ JOG VEL C 1
+ JOG HOME C-1
+ JOG VEL D 1
+ JOG HOME D-1
+ INH 16290  : REM wait for C to home
+ INH 16450  : REM wait for D to home
+ ACC 15
+ DEC 15
+ REM
+ IF  ((125 > P52) OR (P52 > 375)) : REM check coil standoff value
+  P52= 250 : REM default coil standoff 0.25"
+  ENDIF 
+ IF ((125 > P58) OR (P58 > 375)) : REM check coil standoff value
+  P58= 250 : REM default coil standoff 0.25"
+  ENDIF
+ REM
+ _loop
+ IF ((BIT 192) AND (BIT 136) AND (BIT 161)) : REM If Z has found plate
+  SET 205
+ ELSE
+  CLR 205
+  ENDIF
+ REM ********************Check bit 205 for AHC Start*****************************
+ IF (BIT205 <> BIT206) 
+  BIT206 = BIT205 : REM update the old value with the new
+  IF (BIT205) : REM Automatic Height Control (AHC)
+   GOTO FindPlate
+  ELSE  
+   GOSUB servomode
+   ENDIF   
+  ENDIF   
+ REM
+ REM *********************Update C D Position**************************************
+ IF (BIT208) 
+  VEL C5 
+  IF ((P6440 > (P52+20)) AND (P6440 < (P52+60)))  
+    LV2 = LV2 + 1
+    IF (LV2 > 7)  
+     C/0.01 
+     LV2 = 0
+    ENDIF
+  ELSE  IF  ((P6440 < (P52-20)) AND (P6440 > (P52-75))) 
+    LV3 = LV3 + 1
+    IF (LV3 > 7)
+     C/-0.01 
+     LV3 = 0
+    ENDIF
+  ELSE 
+   LV2 = 0
+   LV3 = 0
+   ENDIF  
+  ENDIF 
+ IF (BIT213) 
+  VEL D5 
+  IF ((P6456 > (P58+20)) AND (P6456 < (P58+60)))  
+    LV4 = LV4 + 1
+   IF (LV4 > 7) 
+     D/0.01 
+     LV4 = 0
+    ENDIF
+  ELSE  IF  ((P6456 < (P58-20)) AND (P6456 > (P58-75))) 
+    LV5 = LV5 + 1
+   IF (LV5 > 7)
+     D/-0.01 
+     LV5 = 0
+    ENDIF
+  ELSE
+   LV4 = 0
+   LV5 = 0
+   ENDIF  
+  ENDIF   
+ REM
+ REM *****************************Check Sensor C D for Noisy Data****************************
+ REM
+ IF (BIT208) 
+  IF ((P6440 > P52+500) OR (P6440 < P52-500))
+   LV0= LV0+1 
+   P54= LV0 
+   ENDIF  
+  IF  (LV0 > 30) 
+   SET 209 : REM indicate that the sensors need to be cleaned
+   LV0= 0 
+   P54= 0 
+   ENDIF  
+  IF  (BIT210) 
+   LV0= 0 
+   P54= 0 
+   CLR 210 
+   ENDIF  
+  REM
+  ENDIF   
+ IF (BIT213) 
+  IF ((P6456 > P58+500) OR (P6456 < P58-500))
+   LV1= LV1+1 
+   P55= LV1 
+   ENDIF  
+  IF  (LV1 > 30) 
+   SET 214 : REM indicate that the sensors need to be cleaned
+   LV1= 0 
+   P55= 0 
+   ENDIF  
+  IF  (BIT215) 
+   LV1= 0 
+   P55= 0 
+   CLR 215 
+   ENDIF  
+  REM
+  ENDIF   
+ INH -644
+ GOTO loop
+ REM
+ REM *****************************Find Coupling Gap*************************************
+ _FindPlate
+ REM
+ LV2 = 0
+ LV3 = 0
+ LV4 = 0
+ LV5 = 0
+ IF (BIT 136)
+  SET 12040
+  ENDIF
+ IF (BIT 161)
+  SET 12041
+  ENDIF
+ REM move C & D to the proper standoff height, 0.25"
+ VEL 2 
+ SV0 = ((P6440 - P52) * .6)/1000 : REM move 80% of distance from standoff
+ SV1 = ((P6456 - P58) * .6)/1000
+ C/(SV0) D/(SV1)
+ INH -644      : REM wait for C and D to stop
+ _FindCouplingGap
+ SET BIT207: REM PRESET HEAD is POSITION FLAG.
+ SET BIT212: REM PRESET HEAD is POSITION FLAG.
+ IF (BIT 136)
+  IF  (P6440 > (P52+100)) 
+    C/0.05 
+    CLR 207 
+  ELSE  IF  (P6440 > (P52+20)) 
+    C/0.01 
+    CLR 207 
+  ELSE  IF  (P6440 < (P52-100)) 
+    C/-0.02 
+    CLR 207 
+  ELSE  IF  (P6440 < (P52-20)) 
+    C/-0.01 
+    CLR 207 
+   ENDIF 
+ ENDIF
+ IF (BIT 161) 
+  IF (P6456 > (P58+100)) 
+    D/0.05 
+    CLR 212 
+  ELSE  IF  (P6456 > (P58+20)) 
+    D/0.01 
+    CLR 212 
+  ELSE  IF  (P6456 < (P58-100)) 
+    D/-0.02 
+    CLR 212 
+  ELSE  IF  (P6456 < (P58-20)) 
+    D/-0.01 
+    CLR 212 
+   ENDIF  
+ ENDIF 
+ REM
+ SET 211
+ IF (BIT 136)
+  IF (BIT207) 
+   SET 208 : REM found standoff C
+  ELSE
+   CLR 211
+  ENDIF
+ ENDIF
+ IF (BIT 161)
+  IF (BIT212)  
+    SET 213 : REM found standoff D
+   ELSE
+    CLR 211
+   ENDIF
+ ENDIF
+ IF (BIT 211)
+  GOTO loop
+ ELSE  
+  DWL .15
+  GOTO FindCouplingGap
+ ENDIF  
+ REM
+ REM *******************************Clear AHC**********************************
+ _servomode
+ REM Routine to clear AHC.  Jog home  C D
+ CLR 205
+ CLR 206
+ CLR 207
+ CLR 208
+ CLR 211
+ CLR 200
+ CLR 212
+ CLR 213
+ LV0 = 0
+ LV1 = 0
+ JOG VEL C 1
+ JOG HOME C-1
+ JOG VEL D 1
+ JOG HOME D-1
+ SET 12044 : REM turn on Air Purge for steam inside induction head
+ SET 12045 : REM turn on Air Purge for steam inside induction head
+ CLR 12040 : REM turn off air
+ CLR 12041 : REM turn off air
+ DWL 8  : REM dwell until heavy steam off plate has subsided
+ CLR 12044 : REM turn off air purge in station
+ CLR 12042 : REM turn off water
+ CLR 12045 : REM turn off air purge in station
+ CLR 12043
+ RETURN
+ REM
+ENDP
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

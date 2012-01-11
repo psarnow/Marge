@@ -1,0 +1,695 @@
+PROGRAM 
+ REM PROGRAM 6
+ REM 20110317 PLS -- Version 1.0 
+ REM 
+ REM *******************************************************
+ REM
+ REM 6 Headed Forming on MARGE Heating
+ REM 
+ REM *******************************************************
+ REM INITIALIZATION
+ REM
+ DIM SV(10)
+ CLR 12038 : REM clear coil A contact
+ CLR 12039 : REM clear coil B contact
+ CLR 12046 : REM clear coil C contact
+ CLR 12047 : REM clear coil D contact
+ CLR 12054 : REM clear coil E contact
+ CLR 12055 : REM clear coil FF contact
+ CLR 12034 : REM turn off water A
+ CLR 12035 : REM turn off water B
+ CLR 12042 : REM turn off water C
+ CLR 12043 : REM turn off water D
+ CLR 12050 : REM turn off water E
+ CLR 12051 : REM turn off water FF
+ P33296 = 10 : REM reference command A
+ P33328 = 10 : REM reference command B
+ P33360 = 10 : REM reference command C
+ P33392 = 10 : REM reference command D
+ P33424 = 10 : REM reference command E
+ P33456 = 10 : REM reference command FF
+ P33280 = 0  : REM set power level to 0% A
+ P33312 = 0  : REM set power level to 0% B
+ P33344 = 0  : REM set power level to 0% C
+ P33376 = 0  : REM set power level to 0% D
+ P33408 = 0  : REM set power level to 0% E
+ P33440 = 0  : REM set power level to 0% FF
+ CLR 230
+ CLR 231
+ CLR 232
+ CLR 233
+ CLR 234
+ REM
+ REM *****************Heating Status Loop*******************************
+ REM
+ _loop
+ IF (NOT BIT 231)
+  IF ((BIT 196) OR (BIT 202) OR (BIT 208))
+   PRINT "goto readytoheat"
+   GOTO readytoheat
+   ENDIF
+  ENDIF
+ IF (BIT 234)
+  GOTO shutdownheating
+ ELSE IF (BIT 232)
+  GOTO pauseheating
+ ELSE IF (BIT 233)
+  GOTO unpauseheating
+ ELSE IF (BIT 149)
+  GOTO psfaultrecovery
+ ELSE IF (BIT 235)
+  GOTO tempfault
+  ENDIF
+ PRINT "Goto Loop"
+ GOTO loop
+ REM
+ REM *****************Ready to Heat??***********************************
+ _readytoheat
+ SET 230
+ IF (BIT 134)
+  IF (NOT BIT 196) : REM A hasn't found standoff
+   CLR 230   : REM Not ready to heat
+   ENDIF
+  ENDIF
+ IF (BIT 135)
+  IF (NOT BIT 202) : REM B hasn't found standoff
+   CLR 230   : REM Not ready to heat
+   ENDIF
+  ENDIF
+ IF (BIT 136)
+  IF (NOT BIT 208) : REM C hasn't found standoff
+   CLR 230   : REM Not ready to heat
+   ENDIF
+  ENDIF
+ IF (BIT 161)
+  IF (NOT BIT 213) : REM D hasn't found standoff
+   CLR 230   : REM Not ready to heat
+   ENDIF
+  ENDIF
+ IF (BIT 162)
+  IF (NOT BIT 219) : REM E hasn't found standoff
+   CLR 230   : REM Not ready to heat
+   ENDIF
+  ENDIF
+ IF (BIT 163)
+  IF (NOT BIT 224) : REM F hasn't found standoff
+   CLR 230   : REM Not ready to heat
+   ENDIF
+  ENDIF
+ REM
+ IF (BIT 230)
+  GOTO startheating
+ ELSE
+  GOTO readytoheat
+  ENDIF
+ REM
+ REM ******************Start Heating***********************************
+ _startheating
+ REM turn on water
+ PRINT "start heating"
+ IF (BIT 196)
+  SET 12034 
+  ENDIF
+ IF (BIT 202)
+  SET 12035
+  ENDIF
+ IF (BIT 208)
+  SET 12042
+  ENDIF
+ IF (BIT 213)
+  SET 12043 
+  ENDIF
+ IF (BIT 219)
+  SET 12050
+  ENDIF
+ IF (BIT 224)
+  SET 12051
+  ENDIF
+ REM
+ DWL 0.5 : REM wait for water to reach heads
+ REM
+ IF (BIT 196)
+  P33280 = 1  : REM PS Ramp Power A
+  SET 12038  : REM Turn on Coil A
+  ENDIF
+ IF (BIT 202)
+  P33312 = 1 : REM PS Ramp Power B
+  SET 12039 : REM Turn on Coil B
+  ENDIF
+ IF (BIT 208)
+  P33344 = 1 : REM PS Ramp Power C
+  SET 12046 : REM Turn on Coil C
+  ENDIF
+ IF (BIT 213)
+  P33376 = 1  : REM PS Ramp Power D
+  SET 12047  : REM Turn on Coil D
+  ENDIF
+ IF (BIT 219)
+  P33408 = 1 : REM PS Ramp Power E
+  SET 12054 : REM Turn on Coil E
+  ENDIF
+ IF (BIT 224)
+  P33440 = 1 : REM PS Ramp Power F
+  SET 12055 : REM Turn on Coil F
+  ENDIF
+ DWL 0.2 : REM ramp up PS
+ P33280 = P70 : REM set power level
+ P33312 = P70
+ P33344 = P70
+ P33376 = P70 
+ P33408 = P70
+ P33440 = P70
+ SET 231 : REM heating has started
+ REM
+ GOTO loop
+ REM ***************************************
+ _pauseheating
+ PRINT "pause heating"
+ REM
+ CLR 232   : REM clear pause heating bit
+ P33280 = 0.1  : REM power down to 1%
+ P33312 = 0.1
+ P33344 = 0.1
+ P33376 = 0.1 
+ P33408 = 0.1
+ P33440 = 0.1
+ GOTO loop
+  REM ***************************************
+ _unpauseheating
+ PRINT "unpause heating"
+ CLR 233   : REM clear unpause heating bit
+ SV1 = P73/10  : REM this is the step increase of time
+ SV3 = P70/2  : REM start of ramp power level
+ SV0 = (P70-SV3)/10  : REM this is the step increase of power
+ P33280 = SV3
+ P33312 = SV3
+ P33344 = SV3
+ P33376 = SV3
+ P33408 = SV3
+ P33440 = SV3
+ SV2 = SV3  : REM current power level in ramp
+ DWL (SV1)
+ _ramp
+ P33280 = SV2 + SV0
+ P33312 = SV2 + SV0
+ P33344 = SV2 + SV0
+ P33376 = SV2 + SV0
+ P33408 = SV2 + SV0
+ P33440 = SV2 + SV0
+ SV2 = P33280
+ DWL (SV1)
+ IF (SV2 < (P70-SV0))
+ GOTO ramp
+ ENDIF
+ P33280 = P70  : REM resume back to command power
+ P33312 = P70
+ P33344 = P70
+ P33376 = P70 
+ P33408 = P70
+ P33440 = P70
+ GOTO loop
+ REM ***************************************
+ _shutdownheating
+ PRINT "shutdown heating"
+ REM
+ CLR 12038 : REM turn off coil
+ CLR 12039
+ CLR 12046
+ CLR 12047
+ CLR 12054
+ CLR 12055
+ P33280 = 0 : REM power level zero
+ P33312 = 0
+ P33344 = 0
+ P33376 = 0 
+ P33408 = 0
+ P33440 = 0
+ DWL 10 : REM run more water thru coils
+ PRINT "turn water off"
+ CLR 12034 : REM turn off water
+ CLR 12035
+ CLR 12042
+ CLR 12043
+ CLR 12050
+ CLR 12051
+ CLR 231
+ CLR 234 : REM heating has shutdown
+ CLR 230 : REM clr heating started flag
+ GOTO loop
+ REM
+ REM ****************************************
+ _psfaultrecovery
+ REM
+ IF ((NOT BIT 18) AND (BIT 134)) : REM PS A Faulted
+  P33312 = 0.1      : REM PS B power .1
+  P33344 = 0.1      : REM PS C power .1
+  P33376 = 0.1      : REM PS D power .1
+  P33408 = 0.1      : REM PS E power .1
+  P33440 = 0.1      : REM PS F power .1
+  P33280 = 1.0      : REM PS A to Ramp Pwr Level
+  CLR 12038       : REM Clear PS A coil
+  INH BIT 18   : REM wait for PS to be reset or fault cleared
+  SET 164   : REM display continue button on GUI
+  INH BIT 165  : REM wait for GUI continue confirmation
+  CLR 164
+  CLR 165
+  SET 12038       : REM Cycle PS A Coil ON
+  DWL .2
+  P33280 = P70
+  DWL (P71 * 0.75)
+  P33312 = P70
+  P33344 = P70
+  P33376 = P70 
+  P33408 = P70
+  P33440 = P70
+  CLR 149       : REM clear PS Fault Flag
+ ELSE IF ((NOT BIT 19) AND (BIT 135))
+  P33312 = 1.0     
+  P33344 = 0.1     
+  P33280 = 0.1 
+  P33376 = 0.1 
+  P33408 = 0.1    
+  P33440 = 0.1   
+  CLR 12039      
+  INH BIT 19   : REM wait for PS to be reset or fault cleared
+  SET 164   : REM display continue button on GUI
+  INH BIT 165  : REM wait for GUI continue confirmation
+  CLR 164
+  CLR 165
+  SET 12039      
+  DWL .2
+  P33312 = P70
+  DWL (P71 * 0.75)
+  P33280 = P70
+  P33344 = P70
+  P33376 = P70 
+  P33408 = P70
+  P33440 = P70
+  CLR 149       : REM clear PS Fault Flag
+ ELSE IF ((NOT BIT 20) AND (BIT 136))
+  P33312 = 0.1     
+  P33344 = 1.0     
+  P33280 = 0.1 
+  P33376 = 0.1 
+  P33408 = 0.1    
+  P33440 = 0.1    
+  CLR 12046      
+  INH BIT 20   : REM wait for PS to be reset or fault cleared
+  SET 164   : REM display continue button on GUI
+  INH BIT 165  : REM wait for GUI continue confirmation
+  CLR 164
+  CLR 165
+  SET 12046      
+  DWL .2
+  P33344 = P70
+  DWL (P71 * 0.75)
+  P33312 = P70
+  P33280 = P70
+  P33376 = P70 
+  P33408 = P70
+  P33440 = P70
+  CLR 149       : REM clear PS Fault Flag
+ ELSE IF ((NOT BIT 21) AND (BIT 161))
+  P33312 = 0.1     
+  P33344 = 0.1     
+  P33280 = 0.1 
+  P33376 = 1.0 
+  P33408 = 0.1    
+  P33440 = 0.1    
+  CLR 12047      
+  INH BIT 21   : REM wait for PS to be reset or fault cleared
+  SET 164   : REM display continue button on GUI
+  INH BIT 165  : REM wait for GUI continue confirmation
+  CLR 164
+  CLR 165
+  SET 12047      
+  DWL .2
+  P33376 = P70
+  DWL (P71 * 0.75)
+  P33312 = P70
+  P33280 = P70
+  P33344 = P70
+  P33376 = P70 
+  P33408 = P70
+  P33440 = P70
+  CLR 149       : REM clear PS Fault Flag
+ ELSE IF ((NOT BIT 22) AND (BIT 162))
+  P33312 = 0.1     
+  P33344 = 0.1     
+  P33280 = 0.1 
+  P33376 = 0.1 
+  P33408 = 1.0    
+  P33440 = 0.1    
+  CLR 12054      
+  INH BIT 22   : REM wait for PS to be reset or fault cleared
+  SET 164   : REM display continue button on GUI
+  INH BIT 165  : REM wait for GUI continue confirmation
+  CLR 164
+  CLR 165
+  SET 12054      
+  DWL .2
+  P33408 = P70
+  DWL (P71 * 0.75)
+  P33312 = P70
+  P33280 = P70
+  P33344 = P70
+  P33376 = P70 
+  P33408 = P70
+  P33440 = P70
+  CLR 149       : REM clear PS Fault Flag
+ ELSE IF ((NOT BIT 23) AND (BIT 163))
+  P33312 = 0.1     
+  P33344 = 0.1     
+  P33280 = 0.1 
+  P33376 = 0.1 
+  P33408 = 0.1    
+  P33440 = 1.0    
+  CLR 12055      
+  INH BIT 23   : REM wait for PS to be reset or fault cleared
+  SET 164   : REM display continue button on GUI
+  INH BIT 165  : REM wait for GUI continue confirmation
+  CLR 164
+  CLR 165
+  SET 12055      
+  DWL .2
+  P33440 = P70
+  DWL (P71 * 0.75)
+  P33312 = P70
+  P33280 = P70
+  P33344 = P70
+  P33376 = P70 
+  P33408 = P70
+  P33440 = P70
+  CLR 149       : REM clear PS Fault Flag
+  ENDIF
+ GOTO loop
+REM ****************************************
+_tempfault
+P33280 = 0.1     : REM PS A power .1
+P33312 = 0.1     : REM PS B power .1
+P33344 = 0.1     : REM PS C power .1
+P33376 = 0.1     : REM PS D power .1
+P33408 = 0.1     : REM PS E power .1
+P33440 = 0.1     : REM PS F power .1
+DWL 10
+INH -235   : REM wait for user to clear temp fault
+IF ((BIT 134) OR (BIT 135))
+  SET 193   : REM start AHC
+ELSE IF ((BIT 136) OR (BIT 161))
+  SET 205
+ELSE IF ((BIT 162) OR (BIT 163))
+  SET 216
+ENDIF
+GOTO readytoheat
+ REM
+ENDP 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

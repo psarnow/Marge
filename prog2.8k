@@ -1,0 +1,465 @@
+ PROGRAM 
+ REM PROGRAM2
+ REM 20110317 PLS - Big Z and S
+ REM
+ REM *******************************************************
+ REM Plate Tracking Program for Big Z
+ REM 6 Headed  Forming on MARGE for Tower Forming
+ REM
+ REM *******************************************************
+ REM 
+ REM Version 1.0
+ REM
+ REM
+ REM PARAMETERS
+ DIM SV(5) 
+ DIM LV(10) 
+ REM 
+ REM INITIALIZE
+ REM
+ LOCK AXIS8 AXIS2
+ DRIVE ON Z 
+ DRIVE ON S
+ DWL .2
+ REM CLR 190 : REM Clear AHC Find Plate Flag
+ REM CLR 191 : REM Clear AHC Find Plate Latch
+ CLR 192 : REM Clear Found Plate Flag
+ CLR 200 : REM Scanning Plate Found
+ ACC 10
+ DEC 10
+ JOG ACC Z 8
+ JOG DEC Z 8
+ JOG ACC S 8
+ JOG DEC S 8
+ IF (P53<500) : REM check Find Plate Standoff, set to default
+  P53 = 2000
+  ENDIF
+ IF (P57<2000) : REM check Scanning Standoff, set to default
+  P57 = 4000
+  ENDIF
+ IF ((BIT 134) OR (BIT 135))
+  SET 1128  : REM run prog3
+  ENDIF
+ IF ((BIT 136) OR (BIT 161))
+  SET 1160  : REM RUN PROG4
+  ENDIF
+ IF ((BIT 162) OR (BIT 163))
+  SET 1192  : REM RUN PROG5
+  ENDIF 
+ REM
+ REM
+ PRINT "Starting AHC Find Plate" 
+ REM 
+ REM Reference Z to home position
+ IF (NOT BIT 16198)
+  UNLOCK AXIS8
+  JOG VEL Z3 
+  JOG VEL S3
+  JOG HOME Z-1 S-1
+  INH 16194 : REM wait for Z to home
+  INH 16390 : REM wait for S to home
+  LOCK AXIS8 AXIS2
+ ENDIF
+ REM
+ _loop
+ REM **********Check bit 190 for AHC Find Plate*****************************
+ IF  (BIT190 <> BIT191) 
+  BIT191= BIT190   : REM update the old value with the new
+  IF  (BIT190)   : REM Automatic Height Control (AHC)
+   PRINT "Going into AHC..." 
+   GOTO findplate
+  ELSE  
+   GOSUB servomode
+   ENDIF  
+  ENDIF  
+ REM
+ REM **********************Scanning Update Standoff***********************
+ REM
+ IF (BIT 200)   : REM scanning standoff found
+  VEL Z5
+  IF ((((P6408*LV1)+(P6424*LV2)+(P6440*LV3))/LV0) > (P57+500))
+   Z/0.25
+  ELSE IF ((((P6408*LV1)+(P6424*LV2)+(P6440*LV3))/LV0) > (P57+100))  
+   Z/0.01 
+  ELSE  IF  ((((P6408*LV1)+(P6424*LV2)+(P6440*LV3))/LV0) < (P57-500))
+   Z/-0.25
+  ELSE  IF  ((((P6408*LV1)+(P6424*LV2)+(P6440*LV3))/LV0) < (P57-100))
+   Z/-0.01 
+   ENDIF  
+  ENDIF   
+  DWL .1
+ GOTO loop
+ REM **********************Initial Z Movement Down*********************
+ REM
+ _findplate
+ REM make sure water is off before going down
+ INH -12034
+ INH -12035
+ INH -12042
+ INH -12043
+ INH -12050
+ INH -12051
+ INH -548 : REM wait for Master1 to stop moving
+ INH -580 : REM wait for Master2 to stop moving
+ JOG FWD Z 
+ PRINT "Getting Sensors In range" 
+ REM Turn on Air
+ IF (BIT 134)  : REM using Head A
+  SET 12032
+  ENDIF  
+ IF (BIT 135) : REM using Head B
+  SET 12033
+  ENDIF
+ IF (BIT 136) : REM using Head C
+  SET 12040
+  ENDIF
+ IF (BIT 161)
+  SET 12041
+  ENDIF
+ IF (BIT 162)
+  SET 12048
+  ENDIF
+ IF (BIT 163)
+  SET 12049
+  ENDIF
+ REM
+ LV0 = 0
+ LV1 = 0
+ LV2 = 0
+ LV3 = 0
+ LV4 = 0
+ LV5 = 0
+ LV6 = 0
+ IF (BIT 134)     : REM if Head A is active
+  LV0 = LV0 +1
+  LV1 = 1
+ ENDIF
+ IF (BIT 135)    : REM if Head B is active
+  LV0 = LV0 +1
+  LV2 = 1
+ ENDIF
+ IF (BIT 136)    : REM if Head C is active
+  LV0 = LV0 +1
+  LV3 = 1
+ ENDIF
+ IF (BIT 161)    : REM if Head D is active
+  LV0 = LV0 +1
+  LV4 = 1
+ ENDIF
+ IF (BIT 162)    : REM if Head E is active
+  LV0 = LV0 +1
+  LV5 = 1
+ ENDIF
+ IF (BIT 163)    : REM if Head F is active
+  LV0 = LV0 +1
+  LV6 = 1
+ ENDIF
+ REM
+ IF ((BIT 129) OR (BIT 131)) : REM In Initial Forming State, or Additional Forming State
+  SV0 = P53         : REM use AHC find plate standoff
+ ELSE            : REM In Measuring/Scanning State
+  SV0 = P57         : REM use Scanning plate standoffd
+  ENDIF
+ WHILE  ((((P6408*LV1)+(P6424*LV2)+(P6440*LV3)+(P6456*LV4)+(P6472*LV5)+(P6488*LV6))/LV0) > SV0) : REM keep on jogging until sensors are in range
+  JOG VEL Z2 
+  WEND  
+ JOG OFF Z 
+ IF ((BIT 130) OR (BIT 154))
+  SET 200      : REM found scanning standoff
+ ELSE
+  SET 192      : REM Z has found the plate
+  ENDIF
+ REM
+ GOTO loop
+ REM
+ _servomode
+ REM Routine to clear AHC Tracking.  Jog home Z, A, B, C
+ UNLOCK AXIS8
+ SET 234  : REM stop heating
+ CLR 192  : REM Z no longer has found plate
+ CLR 193  : REM clear AHC station A & B
+ CLR 205  : REM clear AHC station C & D
+ CLR 216  : REM clear AHC station E & F
+ CLR 12032  : REM turn off air
+ CLR 12033
+ CLR 12040
+ CLR 12041
+ CLR 12048
+ CLR 12049
+ JOG VEL Z3
+ JOG VEL S3
+ INH -548 
+ JOG HOME Z-1 S-1
+ INH 16198 : REM wait until home has been found Z
+ INH 16390 : REM wait until home has been found S
+ LOCK AXIS8 AXIS2
+ RETURN 
+ REM
+ ENDP 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
